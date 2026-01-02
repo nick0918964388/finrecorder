@@ -1,0 +1,13 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1767335945704,
+      "tag": "0000_dry_hobgoblin",
+      "breakpoints": true
+    }
+  ]
+}

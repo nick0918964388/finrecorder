@@ -1,0 +1,39 @@
+# syntax=docker/dockerfile:1
+
+# ============================================
+# Cron Service for FinRecorder
+# Runs scheduled tasks for stock prices, exchange rates, and net value snapshots
+# ============================================
+FROM node:22-alpine
+WORKDIR /app
+
+# Install pnpm and necessary tools
+RUN corepack enable && corepack prepare pnpm@latest --activate && \
+    apk add --no-cache curl
+
+# Copy package files
+COPY package.json pnpm-lock.yaml ./
+
+# Install dependencies
+RUN pnpm install --frozen-lockfile
+
+# Copy source code
+COPY . .
+
+# Set environment variables
+ENV NODE_ENV=production
+ENV TZ=Asia/Taipei
+
+# Create non-root user
+RUN addgroup --system --gid 1001 cron && \
+    adduser --system --uid 1001 cronuser && \
+    chown -R cronuser:cron /app
+
+USER cronuser
+
+# Health check - verify the scheduler is running
+HEALTHCHECK --interval=60s --timeout=10s --start-period=30s --retries=3 \
+  CMD pgrep -f "scheduler" || exit 1
+
+# Start the cron scheduler
+CMD ["npx", "tsx", "src/lib/cron/scheduler.ts"]

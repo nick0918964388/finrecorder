@@ -1,36 +1,65 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# FinRecorder
 
-## Getting Started
+手機優先的股票買賣交易記錄與資產分析 Web APP
 
-First, run the development server:
+## 功能特色
+
+- 記錄台股/美股買賣交易
+- 自動抓取每日收盤價
+- 自動換算匯率計算總資產
+- 資產分析 (年化報酬率、波動率、夏普比率)
+- Google 帳號登入
+- 極簡風格 UI
+
+## 快速開始
+
+### 1. 安裝依賴
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+pnpm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 2. 設定環境變數
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+複製 `.env.example` 為 `.env` 並填入：
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```env
+DATABASE_URL=postgres://finrecorder:finrecorder123@localhost:5432/finrecorder
+AUTH_SECRET=your-secret-key
+AUTH_GOOGLE_ID=your-google-client-id
+AUTH_GOOGLE_SECRET=your-google-client-secret
+NEXTAUTH_URL=http://localhost:3000
+```
 
-## Learn More
+### 3. 啟動資料庫
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+pnpm docker:up
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### 4. 執行資料庫遷移
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+pnpm db:migrate
+```
 
-## Deploy on Vercel
+### 5. 啟動開發伺服器
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```bash
+pnpm dev
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+開啟 http://localhost:3000
+
+## 技術棧
+
+- Next.js 16 (App Router)
+- TypeScript
+- PostgreSQL + Drizzle ORM
+- NextAuth.js v5
+- Tailwind CSS + shadcn/ui
+- Recharts
+
+## 開發文檔
+
+詳細的開發進度和規格請參閱 [DEVELOPMENT.md](./DEVELOPMENT.md)
