@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Loader2, Check } from 'lucide-react';
+import { PageLoading } from '@/components/ui/spinner';
 
 interface UserPreferences {
   defaultMarket: 'TW' | 'US';
@@ -80,9 +81,7 @@ export default function SettingsPage() {
   if (isLoading) {
     return (
       <div className="container max-w-lg mx-auto px-4 py-6">
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
+        <PageLoading message="載入設定..." />
       </div>
     );
   }

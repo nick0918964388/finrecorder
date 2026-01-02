@@ -1,30 +1,38 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
-  Loader2,
   TrendingUp,
   TrendingDown,
   BarChart3,
   PieChart as PieChartIcon,
   Info,
 } from 'lucide-react';
+import { PageLoading, Spinner } from '@/components/ui/spinner';
+
+// Lazy load recharts components - they're heavy
+const LazyLineChart = dynamic(() => import('recharts').then(mod => mod.LineChart), { ssr: false });
+const LazyAreaChart = dynamic(() => import('recharts').then(mod => mod.AreaChart), { ssr: false });
+const LazyPieChart = dynamic(() => import('recharts').then(mod => mod.PieChart), { ssr: false });
+const LazyResponsiveContainer = dynamic(
+  () => import('recharts').then(mod => mod.ResponsiveContainer),
+  { ssr: false, loading: () => <div className="h-[200px] flex items-center justify-center"><Spinner /></div> }
+);
+
+// These are lighter, can import directly
 import {
-  LineChart,
   Line,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer,
-  PieChart,
   Pie,
   Cell,
   Legend,
   Area,
-  AreaChart,
 } from 'recharts';
 
 // ============ TYPES ============
@@ -166,8 +174,8 @@ function NetValueChart({ data }: { data: NetValuePoint[] }) {
   }));
 
   return (
-    <ResponsiveContainer width="100%" height={200}>
-      <AreaChart data={chartData} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
+    <LazyResponsiveContainer width="100%" height={200}>
+      <LazyAreaChart data={chartData} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
         <defs>
           <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
             <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
@@ -189,7 +197,7 @@ function NetValueChart({ data }: { data: NetValuePoint[] }) {
           width={40}
         />
         <Tooltip
-          formatter={(value: number) => [formatCurrency(value), '淨值']}
+          formatter={(value) => [formatCurrency(value as number), '淨值']}
           labelFormatter={(label, payload) => {
             if (payload && payload[0]) {
               return payload[0].payload.fullDate;
@@ -210,8 +218,8 @@ function NetValueChart({ data }: { data: NetValuePoint[] }) {
           fillOpacity={1}
           fill="url(#colorValue)"
         />
-      </AreaChart>
-    </ResponsiveContainer>
+      </LazyAreaChart>
+    </LazyResponsiveContainer>
   );
 }
 
@@ -232,8 +240,8 @@ function AllocationPieChart({ data }: { data: PortfolioAllocation[] }) {
   }));
 
   return (
-    <ResponsiveContainer width="100%" height={200}>
-      <PieChart>
+    <LazyResponsiveContainer width="100%" height={200}>
+      <LazyPieChart>
         <Pie
           data={chartData}
           cx="50%"
@@ -242,7 +250,7 @@ function AllocationPieChart({ data }: { data: PortfolioAllocation[] }) {
           outerRadius={70}
           paddingAngle={2}
           dataKey="value"
-          label={({ name, percentage }) => `${name} ${percentage.toFixed(1)}%`}
+          label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(1)}%`}
           labelLine={{ stroke: '#9ca3af', strokeWidth: 1 }}
         >
           {chartData.map((entry, index) => (
@@ -250,15 +258,15 @@ function AllocationPieChart({ data }: { data: PortfolioAllocation[] }) {
           ))}
         </Pie>
         <Tooltip
-          formatter={(value: number) => [formatCurrency(value), '市值']}
+          formatter={(value) => [formatCurrency(value as number), '市值']}
           contentStyle={{
             fontSize: 12,
             borderRadius: 8,
             border: '1px solid #e5e7eb',
           }}
         />
-      </PieChart>
-    </ResponsiveContainer>
+      </LazyPieChart>
+    </LazyResponsiveContainer>
   );
 }
 
@@ -313,8 +321,8 @@ function DailyReturnChart({ data }: { data: NetValuePoint[] }) {
     }));
 
   return (
-    <ResponsiveContainer width="100%" height={200}>
-      <AreaChart data={chartData} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
+    <LazyResponsiveContainer width="100%" height={200}>
+      <LazyAreaChart data={chartData} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
         <defs>
           <linearGradient id="colorPositive" x1="0" y1="0" x2="0" y2="1">
             <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3} />
@@ -340,7 +348,7 @@ function DailyReturnChart({ data }: { data: NetValuePoint[] }) {
           width={40}
         />
         <Tooltip
-          formatter={(value: number) => [`${value.toFixed(2)}%`, '日報酬']}
+          formatter={(value) => [`${(value as number).toFixed(2)}%`, '日報酬']}
           labelFormatter={(label, payload) => {
             if (payload && payload[0]) {
               return payload[0].payload.fullDate;
@@ -361,8 +369,8 @@ function DailyReturnChart({ data }: { data: NetValuePoint[] }) {
           fillOpacity={1}
           fill="url(#colorPositive)"
         />
-      </AreaChart>
-    </ResponsiveContainer>
+      </LazyAreaChart>
+    </LazyResponsiveContainer>
   );
 }
 
@@ -377,9 +385,7 @@ export default function AnalyticsPage() {
   if (isLoading) {
     return (
       <div className="container max-w-lg mx-auto px-4 py-6">
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
+        <PageLoading message="載入分析資料..." />
       </div>
     );
   }

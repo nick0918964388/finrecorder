@@ -1,11 +1,22 @@
 'use client';
 
 import Link from 'next/link';
-import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Plus, ArrowUpCircle, ArrowDownCircle, Loader2 } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Plus, ArrowUpCircle, ArrowDownCircle, ArrowLeft, Pencil, Trash2 } from 'lucide-react';
+import { PageLoading } from '@/components/ui/spinner';
 
 interface Stock {
   id: string;
@@ -50,6 +61,15 @@ async function fetchTransactions(): Promise<TransactionsResponse> {
   return response.json();
 }
 
+async function deleteTransaction(id: string): Promise<void> {
+  const response = await fetch(`/api/transactions/${id}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) {
+    throw new Error('Failed to delete transaction');
+  }
+}
+
 function formatCurrency(amount: string, currency: 'TWD' | 'USD'): string {
   const num = parseFloat(amount);
   if (currency === 'TWD') {
@@ -67,17 +87,41 @@ function formatPrice(price: string, currency: 'TWD' | 'USD'): string {
 }
 
 export default function TransactionsPage() {
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [transactionToDelete, setTransactionToDelete] = useState<Transaction | null>(null);
+
   const { data, isLoading, error } = useQuery({
     queryKey: ['transactions'],
     queryFn: fetchTransactions,
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: deleteTransaction,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['portfolio'] });
+      setDeleteDialogOpen(false);
+      setTransactionToDelete(null);
+    },
+  });
+
+  const handleDeleteClick = (transaction: Transaction) => {
+    setTransactionToDelete(transaction);
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDelete = () => {
+    if (transactionToDelete) {
+      deleteMutation.mutate(transactionToDelete.id);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="container max-w-lg mx-auto px-4 py-6">
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
+        <PageLoading message="載入交易記錄..." />
       </div>
     );
   }
@@ -101,7 +145,14 @@ export default function TransactionsPage() {
   return (
     <div className="container max-w-lg mx-auto px-4 py-6 space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">交易記錄</h2>
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" asChild>
+            <Link href="/dashboard">
+              <ArrowLeft className="h-5 w-5" />
+            </Link>
+          </Button>
+          <h2 className="text-2xl font-bold">交易記錄</h2>
+        </div>
         <Button asChild size="sm">
           <Link href="/transactions/new">
             <Plus className="h-4 w-4 mr-1" />
@@ -172,11 +223,59 @@ export default function TransactionsPage() {
                     {transaction.notes}
                   </p>
                 )}
+                <div className="flex justify-end gap-2 mt-3 pt-3 border-t">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    asChild
+                  >
+                    <Link href={`/transactions/${transaction.id}/edit`}>
+                      <Pencil className="h-4 w-4 mr-1" />
+                      編輯
+                    </Link>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-destructive hover:text-destructive"
+                    onClick={() => handleDeleteClick(transaction)}
+                  >
+                    <Trash2 className="h-4 w-4 mr-1" />
+                    刪除
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           ))}
         </div>
       )}
+
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>確認刪除</DialogTitle>
+            <DialogDescription>
+              確定要刪除這筆交易嗎？此操作無法復原，且會影響您的持倉計算。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteDialogOpen(false)}
+              disabled={deleteMutation.isPending}
+            >
+              取消
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmDelete}
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending ? '刪除中...' : '確認刪除'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

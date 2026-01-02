@@ -4,7 +4,8 @@ import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, TrendingUp, TrendingDown } from 'lucide-react';
+import { TrendingUp, TrendingDown } from 'lucide-react';
+import { PageLoading } from '@/components/ui/spinner';
 
 interface HoldingWithStock {
   holding: {
@@ -153,9 +154,7 @@ export default function PortfolioPage() {
   if (isLoading) {
     return (
       <div className="container max-w-lg mx-auto px-4 py-6">
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
+        <PageLoading message="載入持倉資料..." />
       </div>
     );
   }

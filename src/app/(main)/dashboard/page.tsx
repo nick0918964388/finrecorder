@@ -10,8 +10,8 @@ import {
   Wallet,
   Activity,
   ArrowRight,
-  Loader2,
 } from 'lucide-react';
+import { Spinner } from '@/components/ui/spinner';
 
 interface PortfolioSummary {
   totalCostTWD: number;
@@ -109,7 +109,7 @@ export default function DashboardPage() {
         <CardContent className="pt-6 pb-6">
           <p className="text-sm text-slate-300 mb-1">總資產</p>
           {isLoading ? (
-            <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+            <Spinner size="md" className="border-slate-400/20 border-t-slate-400" />
           ) : (
             <>
               <div className="text-3xl font-bold tracking-tight">
@@ -260,7 +260,7 @@ export default function DashboardPage() {
         <CardContent>
           {transactionsLoading ? (
             <div className="flex justify-center py-4">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              <Spinner size="sm" />
             </div>
           ) : transactions && transactions.length > 0 ? (
             <div className="space-y-3">

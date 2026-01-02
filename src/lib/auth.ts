@@ -33,4 +33,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   pages: {
     signIn: '/login',
   },
+  // Trust the proxy headers (for Docker/reverse proxy)
+  trustHost: true,
+  // Session configuration
+  session: {
+    maxAge: 30 * 24 * 60 * 60, // 30 days
+    updateAge: 24 * 60 * 60, // Update session every 24 hours
+  },
 });
