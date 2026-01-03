@@ -4,6 +4,7 @@ import { SessionProvider } from '@/providers/session-provider';
 import { QueryProvider } from '@/providers/query-provider';
 import { Header } from '@/components/layout/header';
 import { BottomNav } from '@/components/layout/bottom-nav';
+import { MainContent } from '@/components/layout/main-content';
 
 export default async function MainLayout({
   children,
@@ -21,7 +22,7 @@ export default async function MainLayout({
       <QueryProvider>
         <div className="min-h-screen bg-background">
           <Header />
-          <main className="pb-20 md:pb-0">{children}</main>
+          <MainContent>{children}</MainContent>
           <BottomNav />
         </div>
       </QueryProvider>

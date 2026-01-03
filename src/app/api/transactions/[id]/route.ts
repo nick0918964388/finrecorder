@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth';
 import { db } from '@/db';
 import { transactions, stocks, holdings } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
+import { calculateUserNetValue, saveUserNetValue } from '@/lib/services/net-value';
 
 // GET /api/transactions/[id] - Get a single transaction
 export async function GET(
@@ -77,13 +78,16 @@ export async function PUT(
       where: eq(stocks.id, existingTransaction.stockId),
     });
 
-    // Reverse the old transaction's effect on holdings
+    // Reverse the old transaction's effect on holdings - use actual cost per share
+    const oldCostPerShare = existingTransaction.type === 'BUY'
+      ? parseFloat(existingTransaction.totalAmount) / existingTransaction.quantity
+      : parseFloat(existingTransaction.price);
     await reverseHoldingEffect(
       session.user.id,
       existingTransaction.stockId,
       existingTransaction.type as 'BUY' | 'SELL',
       existingTransaction.quantity,
-      parseFloat(existingTransaction.price),
+      oldCostPerShare,
       existingTransaction.currency as 'TWD' | 'USD'
     );
 
@@ -129,15 +133,28 @@ export async function PUT(
       .where(eq(transactions.id, id))
       .returning();
 
-    // Apply the new transaction's effect on holdings
+    // Apply the new transaction's effect on holdings - use actual cost per share
+    const costPerShare = type === 'BUY'
+      ? totalAmount / quantity  // Buy: total cost including fees
+      : price;  // Sell: use original price
     await applyHoldingEffect(
       session.user.id,
       existingTransaction.stockId,
       type as 'BUY' | 'SELL',
       quantity,
-      price,
+      costPerShare,
       currency as 'TWD' | 'USD'
     );
+
+    // Auto-generate daily net value snapshot
+    try {
+      const netValue = await calculateUserNetValue(session.user.id);
+      if (netValue && netValue.totalValueTWD > 0) {
+        await saveUserNetValue(netValue);
+      }
+    } catch (snapshotError) {
+      console.error('Error creating net value snapshot:', snapshotError);
+    }
 
     return NextResponse.json({ success: true, data: updatedTransaction });
   } catch (error) {
@@ -186,6 +203,16 @@ export async function DELETE(
 
     // Delete the transaction
     await db.delete(transactions).where(eq(transactions.id, id));
+
+    // Auto-generate daily net value snapshot
+    try {
+      const netValue = await calculateUserNetValue(session.user.id);
+      if (netValue && netValue.totalValueTWD > 0) {
+        await saveUserNetValue(netValue);
+      }
+    } catch (snapshotError) {
+      console.error('Error creating net value snapshot:', snapshotError);
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

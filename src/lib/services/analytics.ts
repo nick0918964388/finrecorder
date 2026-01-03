@@ -53,6 +53,8 @@ export interface AnalyticsData {
     totalPnL: number;
     totalPnLPercent: number;
   };
+  availableYears: number[]; // 有資料的年度列表
+  selectedYear: number | null; // 當前選擇的年度
 }
 
 // ============ CONSTANTS ============
@@ -180,14 +182,50 @@ export function calculateDailyStats(dailyReturns: { date: string; return: number
 // ============ DATA FETCHING ============
 
 /**
- * 取得用戶的績效指標
+ * 取得用戶有淨值資料的年度列表
  */
-export async function getUserPerformanceMetrics(userId: string): Promise<PerformanceMetrics> {
-  // 取得淨值歷史
+export async function getUserAvailableYears(userId: string): Promise<number[]> {
   const netValues = await db.query.dailyNetValues.findMany({
     where: eq(dailyNetValues.userId, userId),
+    columns: { date: true },
     orderBy: [dailyNetValues.date],
   });
+
+  if (netValues.length === 0) return [];
+
+  const years = new Set<number>();
+  for (const v of netValues) {
+    years.add(parseInt(v.date.split('-')[0], 10));
+  }
+
+  return Array.from(years).sort((a, b) => b - a); // 降序排列
+}
+
+/**
+ * 取得用戶的績效指標
+ * @param userId 用戶 ID
+ * @param year 指定年度，null 表示全部資料
+ */
+export async function getUserPerformanceMetrics(userId: string, year: number | null = null): Promise<PerformanceMetrics> {
+  // 取得淨值歷史
+  let netValues;
+  if (year) {
+    const startDate = `${year}-01-01`;
+    const endDate = `${year}-12-31`;
+    netValues = await db.query.dailyNetValues.findMany({
+      where: and(
+        eq(dailyNetValues.userId, userId),
+        gte(dailyNetValues.date, startDate),
+        sql`${dailyNetValues.date} <= ${endDate}`
+      ),
+      orderBy: [dailyNetValues.date],
+    });
+  } else {
+    netValues = await db.query.dailyNetValues.findMany({
+      where: eq(dailyNetValues.userId, userId),
+      orderBy: [dailyNetValues.date],
+    });
+  }
 
   if (netValues.length === 0) {
     return {
@@ -223,9 +261,9 @@ export async function getUserPerformanceMetrics(userId: string): Promise<Perform
   const endValue = values[values.length - 1].value;
   const totalReturn = startValue > 0 ? ((endValue - startValue) / startValue) * 100 : 0;
 
-  // 計算今年以來報酬率
-  const currentYear = new Date().getFullYear();
-  const ytdStartValue = values.find(v => v.date.startsWith(`${currentYear}-`))?.value || startValue;
+  // 計算今年以來報酬率 (如果有指定年度，則為該年度報酬率)
+  const targetYear = year || new Date().getFullYear();
+  const ytdStartValue = values.find(v => v.date.startsWith(`${targetYear}-`))?.value || startValue;
   const ytdReturn = ytdStartValue > 0 ? ((endValue - ytdStartValue) / ytdStartValue) * 100 : 0;
 
   // 計算年數
@@ -277,10 +315,10 @@ export async function getUserPortfolioAllocation(userId: string): Promise<Portfo
   for (const holding of userHoldings) {
     if (holding.quantity <= 0) continue;
 
+    // 優先使用最新市價，若無則使用持倉均價
     const latestPrice = await getLatestStockPrice(holding.stockId);
-    if (!latestPrice) continue;
-
-    let valueTWD = latestPrice * holding.quantity;
+    const price = latestPrice ?? parseFloat(holding.averageCost);
+    let valueTWD = price * holding.quantity;
     if (holding.stock.market === 'US') {
       valueTWD *= usdToTwd;
     }
@@ -308,22 +346,41 @@ export async function getUserPortfolioAllocation(userId: string): Promise<Portfo
 
 /**
  * 取得淨值歷史 (用於圖表)
+ * @param userId 用戶 ID
+ * @param days 歷史天數 (如果指定 year 則忽略此參數)
+ * @param year 指定年度，null 表示使用 days 參數
  */
 export async function getUserNetValueHistory(
   userId: string,
-  days: number = 90
+  days: number = 90,
+  year: number | null = null
 ): Promise<NetValuePoint[]> {
-  const cutoffDate = new Date();
-  cutoffDate.setDate(cutoffDate.getDate() - days);
-  const cutoffDateStr = cutoffDate.toISOString().split('T')[0];
+  let netValues;
 
-  const netValues = await db.query.dailyNetValues.findMany({
-    where: and(
-      eq(dailyNetValues.userId, userId),
-      gte(dailyNetValues.date, cutoffDateStr)
-    ),
-    orderBy: [dailyNetValues.date],
-  });
+  if (year) {
+    const startDate = `${year}-01-01`;
+    const endDate = `${year}-12-31`;
+    netValues = await db.query.dailyNetValues.findMany({
+      where: and(
+        eq(dailyNetValues.userId, userId),
+        gte(dailyNetValues.date, startDate),
+        sql`${dailyNetValues.date} <= ${endDate}`
+      ),
+      orderBy: [dailyNetValues.date],
+    });
+  } else {
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - days);
+    const cutoffDateStr = cutoffDate.toISOString().split('T')[0];
+
+    netValues = await db.query.dailyNetValues.findMany({
+      where: and(
+        eq(dailyNetValues.userId, userId),
+        gte(dailyNetValues.date, cutoffDateStr)
+      ),
+      orderBy: [dailyNetValues.date],
+    });
+  }
 
   return netValues.map(v => ({
     date: v.date,
@@ -334,14 +391,51 @@ export async function getUserNetValueHistory(
 
 /**
  * 取得投資摘要
+ * @param userId 用戶 ID
+ * @param year 指定年度，null 表示使用當前持倉計算
  */
-export async function getUserInvestmentSummary(userId: string): Promise<{
+export async function getUserInvestmentSummary(userId: string, year: number | null = null): Promise<{
   totalValue: number;
   totalCost: number;
   totalPnL: number;
   totalPnLPercent: number;
 }> {
-  // 取得持倉
+  // 如果指定年度，從淨值快照計算該年度的投資損益
+  if (year) {
+    const startDate = `${year}-01-01`;
+    const endDate = `${year}-12-31`;
+
+    // 取得該年度的淨值快照
+    const yearSnapshots = await db.query.dailyNetValues.findMany({
+      where: and(
+        eq(dailyNetValues.userId, userId),
+        gte(dailyNetValues.date, startDate),
+        sql`${dailyNetValues.date} <= ${endDate}`
+      ),
+      orderBy: [dailyNetValues.date],
+    });
+
+    if (yearSnapshots.length === 0) {
+      return { totalValue: 0, totalCost: 0, totalPnL: 0, totalPnLPercent: 0 };
+    }
+
+    // 期初值和期末值
+    const startValue = parseFloat(yearSnapshots[0].totalValue);
+    const endValue = parseFloat(yearSnapshots[yearSnapshots.length - 1].totalValue);
+
+    // 對於歷史年度，損益 = 期末值 - 期初值
+    const totalPnL = endValue - startValue;
+    const totalPnLPercent = startValue > 0 ? (totalPnL / startValue) * 100 : 0;
+
+    return {
+      totalValue: endValue,
+      totalCost: startValue, // 使用期初值作為「成本」
+      totalPnL,
+      totalPnLPercent,
+    };
+  }
+
+  // 如果沒有指定年度，使用當前持倉計算
   const userHoldings = await db.query.holdings.findMany({
     where: eq(holdings.userId, userId),
     with: {
@@ -382,13 +476,17 @@ export async function getUserInvestmentSummary(userId: string): Promise<{
 
 /**
  * 取得完整的分析資料
+ * @param userId 用戶 ID
+ * @param days 歷史天數 (如果指定 year 則忽略此參數)
+ * @param year 指定年度，null 表示使用 days 參數
  */
-export async function getUserAnalytics(userId: string, days: number = 90): Promise<AnalyticsData> {
-  const [metrics, allocation, netValueHistory, summary] = await Promise.all([
-    getUserPerformanceMetrics(userId),
+export async function getUserAnalytics(userId: string, days: number = 90, year: number | null = null): Promise<AnalyticsData> {
+  const [metrics, allocation, netValueHistory, summary, availableYears] = await Promise.all([
+    getUserPerformanceMetrics(userId, year),
     getUserPortfolioAllocation(userId),
-    getUserNetValueHistory(userId, days),
-    getUserInvestmentSummary(userId),
+    getUserNetValueHistory(userId, days, year),
+    getUserInvestmentSummary(userId, year),
+    getUserAvailableYears(userId),
   ]);
 
   return {
@@ -396,5 +494,7 @@ export async function getUserAnalytics(userId: string, days: number = 90): Promi
     allocation,
     netValueHistory,
     summary,
+    availableYears,
+    selectedYear: year,
   };
 }

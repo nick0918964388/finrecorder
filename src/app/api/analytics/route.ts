@@ -8,6 +8,7 @@ import { getUserAnalytics, type AnalyticsData } from '@/lib/services/analytics';
  *
  * Query Parameters:
  * - days: 歷史資料天數 (預設 90)
+ * - year: 指定年度 (可選，如果指定則忽略 days)
  */
 export async function GET(request: NextRequest) {
   try {
@@ -19,8 +20,10 @@ export async function GET(request: NextRequest) {
 
     const searchParams = request.nextUrl.searchParams;
     const days = parseInt(searchParams.get('days') || '90', 10);
+    const yearParam = searchParams.get('year');
+    const year = yearParam ? parseInt(yearParam, 10) : null;
 
-    const analytics = await getUserAnalytics(session.user.id, days);
+    const analytics = await getUserAnalytics(session.user.id, days, year);
 
     return NextResponse.json(analytics);
   } catch (error) {

@@ -14,7 +14,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Loader2, Check } from 'lucide-react';
+import { Loader2, Check, RefreshCw } from 'lucide-react';
 import { PageLoading } from '@/components/ui/spinner';
 
 interface UserPreferences {
@@ -44,6 +44,17 @@ async function updateSettings(data: Partial<UserPreferences>): Promise<void> {
   }
 }
 
+async function recalculateHoldings(): Promise<{ holdingsUpdated: number }> {
+  const response = await fetch('/api/holdings/recalculate', {
+    method: 'POST',
+  });
+  if (!response.ok) {
+    throw new Error('Failed to recalculate holdings');
+  }
+  const result = await response.json();
+  return result.data;
+}
+
 export default function SettingsPage() {
   const { data: session } = useSession();
   const queryClient = useQueryClient();
@@ -62,6 +73,14 @@ export default function SettingsPage() {
       queryClient.invalidateQueries({ queryKey: ['settings'] });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
+    },
+  });
+
+  const recalculateMutation = useMutation({
+    mutationFn: recalculateHoldings,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['portfolio'] });
+      queryClient.invalidateQueries({ queryKey: ['analytics'] });
     },
   });
 
@@ -235,6 +254,45 @@ export default function SettingsPage() {
           )}
         </Button>
       </form>
+
+      {/* Data Management */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">資料管理</CardTitle>
+          <CardDescription>管理您的投資資料</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label>重新計算持倉均價</Label>
+            <p className="text-xs text-muted-foreground mb-2">
+              根據所有交易記錄重新計算持倉均價（包含手續費和稅）
+            </p>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => recalculateMutation.mutate()}
+              disabled={recalculateMutation.isPending}
+            >
+              {recalculateMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  計算中...
+                </>
+              ) : recalculateMutation.isSuccess ? (
+                <>
+                  <Check className="h-4 w-4 mr-2" />
+                  已完成
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  重新計算均價
+                </>
+              )}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

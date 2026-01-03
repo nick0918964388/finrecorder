@@ -4,6 +4,7 @@ import { db } from '@/db';
 import { transactions, stocks, holdings } from '@/db/schema';
 import { createTransactionSchema } from '@/lib/validators';
 import { eq, and, desc } from 'drizzle-orm';
+import { calculateUserNetValue, saveUserNetValue } from '@/lib/services/net-value';
 
 // GET /api/transactions - Get all transactions for the current user
 export async function GET(request: NextRequest) {
@@ -122,8 +123,22 @@ export async function POST(request: NextRequest) {
       })
       .returning();
 
-    // Update holdings
-    await updateHoldings(session.user.id, stock.id, data.type, data.quantity, data.price, currency);
+    // Update holdings - use actual cost per share (including fees) for average cost calculation
+    const costPerShare = data.type === 'BUY'
+      ? totalAmount / data.quantity  // Buy: total cost including fees
+      : data.price;  // Sell: use original price (doesn't affect average cost)
+    await updateHoldings(session.user.id, stock.id, data.type, data.quantity, costPerShare, currency);
+
+    // Auto-generate daily net value snapshot
+    try {
+      const netValue = await calculateUserNetValue(session.user.id);
+      if (netValue && netValue.totalValueTWD > 0) {
+        await saveUserNetValue(netValue);
+      }
+    } catch (snapshotError) {
+      console.error('Error creating net value snapshot:', snapshotError);
+      // Don't fail the transaction if snapshot fails
+    }
 
     return NextResponse.json({ success: true, data: newTransaction });
   } catch (error) {

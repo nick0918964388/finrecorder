@@ -50,16 +50,17 @@ export async function calculateUserNetValue(userId: string): Promise<UserNetValu
 
     // 計算每檔股票的市值
     for (const holding of userHoldings) {
+      if (holding.quantity <= 0) continue;
+
+      // 優先使用最新市價，若無則使用持倉均價
       const latestPrice = await getLatestStockPrice(holding.stockId);
+      const price = latestPrice ?? parseFloat(holding.averageCost);
+      const marketValue = price * holding.quantity;
 
-      if (latestPrice && holding.quantity > 0) {
-        const marketValue = latestPrice * holding.quantity;
-
-        if (holding.stock.market === 'TW') {
-          twStockValue += marketValue;
-        } else {
-          usStockValue += marketValue;
-        }
+      if (holding.stock.market === 'TW') {
+        twStockValue += marketValue;
+      } else {
+        usStockValue += marketValue;
       }
     }
 
